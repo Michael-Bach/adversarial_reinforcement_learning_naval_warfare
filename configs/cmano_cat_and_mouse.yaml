@@ -1,0 +1,173 @@
+# configs/cmano_cat_and_mouse.yaml
+#
+# Cat-and-mouse scenario backed by Command: Modern Operations.
+# Mirrors cat_and_mouse.yaml but adds CMANO-specific fields.
+#
+# Run: python scripts/train_cmano.py --config configs/cmano_cat_and_mouse.yaml
+#
+# Prerequisites
+# -------------
+# 1. CMANO/CMO running on Windows with cmano_bridge.lua loaded.
+# 2. bridge_dir accessible to both this process and CMO (network share or local).
+# 3. Set CMANO_BRIDGE_DIR env var on the CMO host to match bridge_dir below.
+
+run_name:   cmano_cat_and_mouse
+output_dir: outputs
+device:     cpu
+grid_half:  100000    # metres — must match the lat/lon span of scenario_center
+
+# ---------------------------------------------------------------------------
+# CMANO bridge settings
+# ---------------------------------------------------------------------------
+
+bridge_dir: /tmp/cmano_bridge   # path shared between Python and CMO Lua process
+                                # On Windows CMO host: C:\cmano_bridge (set CMANO_BRIDGE_DIR)
+ipc_timeout: 120                # seconds before TimeoutError (covers CMO startup)
+
+scenario:
+  center_lat: 35.0              # scenario origin (decimal degrees)
+  center_lon: 120.0
+  step_seconds: 30              # game-time seconds per RL step
+  time_compression: 300         # CMO time compression factor during episode
+
+# ---------------------------------------------------------------------------
+# Fleet definitions
+#
+# Additional CMANO fields vs cat_and_mouse.yaml:
+#   unit_id         : unique name used both in Python and CMO
+#   cmano_classname : CMO database class name (ScenEdit_AddUnit classname=)
+#   cmano_dbid      : optional numeric DB ID override if classname lookup fails
+#   lat / lon       : starting position in decimal degrees
+#   heading_deg     : starting compass heading (0=North, CW)
+#   initial_speed_kts: starting speed
+#   max_speed_kts   : for action translation (speed_fraction × max_speed_kts)
+# ---------------------------------------------------------------------------
+
+fleet_alice:
+  - unit_id: Alice-1
+    cmano_classname: "FFG-7 Oliver Hazard Perry"
+    # cmano_dbid: 768          # uncomment and set if classname lookup fails
+    lat: 34.28                 # ~80 km south-west of center
+    lon: 119.19
+    heading_deg: 45
+    initial_speed_kts: 0
+    max_speed_kts: 29.0
+    weapons:
+      - name: SSM-HARPOON
+        qty: 8
+      - name: 76mm-OTO-Melara
+        qty: 85
+
+  - unit_id: Alice-2
+    cmano_classname: "FFG-7 Oliver Hazard Perry"
+    lat: 34.19
+    lon: 119.28
+    heading_deg: 45
+    initial_speed_kts: 0
+    max_speed_kts: 29.0
+    weapons:
+      - name: SSM-HARPOON
+        qty: 8
+      - name: 76mm-OTO-Melara
+        qty: 85
+
+fleet_bob:
+  - unit_id: Bob-1
+    cmano_classname: "Grisha III"   # slower corvette — must evade
+    lat: 35.63                      # ~70 km north-east of center
+    lon: 120.77
+    heading_deg: 225
+    initial_speed_kts: 0
+    max_speed_kts: 28.0
+    weapons:
+      - name: SSM-SS-N-9-Siren
+        qty: 4
+
+# ---------------------------------------------------------------------------
+# Reward configs — identical to cat_and_mouse.yaml
+# ---------------------------------------------------------------------------
+
+reward_alice:
+  w_gravity:    0.0
+  w_lj_sup:     1.0
+  weapon_range: 50000
+  w_lj_form:    0.5
+  d_form:       8000
+  w_pred:       0.5
+  v_max:        896.0           # 29 knots in m/min
+  w_boundary:   1.0
+
+  kill_reward:    100.0
+  death_penalty:  100.0
+  victory_bonus:  300.0
+  defeat_penalty: 300.0
+  reward_fire:    0.0
+  time_penalty:   -0.01
+  p_hit:          0.8
+
+reward_bob:
+  w_gravity:    -0.5
+  w_lj_sup:     0.0
+  weapon_range: 50000
+  w_lj_form:    0.0
+  w_pred:       0.0
+  w_boundary:   1.0
+
+  kill_reward:    200.0
+  death_penalty:  100.0
+  victory_bonus:  400.0
+  defeat_penalty: 200.0
+  reward_fire:    0.0
+  time_penalty:   +0.05
+  p_hit:          0.8
+
+# ---------------------------------------------------------------------------
+# Agent hyperparameters — unchanged from cat_and_mouse.yaml
+# ---------------------------------------------------------------------------
+
+agent:
+  lr_actor:  0.0001
+  lr_critic: 0.001
+  gamma:     0.99
+  tau:       0.005
+  hidden:    256
+
+  noise_alice:
+    kind: composite
+    parts:
+      - kind: decay
+        per: episode
+        gamma: 0.995
+        scale_min: 0.02
+        base:
+          kind: gaussian
+          dim: 8
+          sigma: 0.2
+      - kind: sparse-weapon
+        n_ships: 2
+        p_fire: 0.3
+
+  noise_bob:
+    kind: decay
+    dim: 4
+    per: episode
+    gamma: 0.995
+    scale_min: 0.02
+    base:
+      kind: gaussian
+      dim: 4
+      sigma: 0.2
+
+# ---------------------------------------------------------------------------
+# Training schedule
+# ---------------------------------------------------------------------------
+
+training:
+  num_episodes:           2000
+  max_steps_per_episode:  500
+  warmup_steps:           2000
+  batch_size:             64
+  save_every:             500
+  rollout_every:          200
+
+wandb_project: naval-adversarial-rl

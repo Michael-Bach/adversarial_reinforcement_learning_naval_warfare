@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "naval-rl"
@@ -39,6 +39,10 @@ wandb = [
 viz = [
   "seaborn>=0.12",
   "imageio[ffmpeg]>=2.31",
+]
+cmano = [
+  "pycmo @ git+https://github.com/Michael-Bach/pycmo.git",
+  "xmltodict>=0.13",
 ]
 
 [tool.setuptools.packages.find]
